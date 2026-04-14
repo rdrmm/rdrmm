@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RDRMM Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .metric { margin: 10px 0; }
+        .alert { color: red; }
+        .agent { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+        .online { color: green; }
+        .offline { color: red; }
+    </style>
+</head>
+<body>
+    <h1>RDRMM - Remote Monitoring Dashboard</h1>
+    <div id="local-metrics">
+        <h2>Local System Metrics</h2>
+        <div class="metric">CPU Usage: <span id="cpu">-</span>%</div>
+        <div class="metric">Memory Usage: <span id="memory">-</span>% (<span id="mem-used">-</span> / <span id="mem-total">-</span>)</div>
+        <div class="metric">Disk Usage: <span id="disk">-</span>% (<span id="disk-used">-</span> / <span id="disk-total">-</span>)</div>
+    </div>
+    <div id="alerts">
+        <h2>Local Alerts</h2>
+        <div id="alert-list"></div>
+    </div>
+    <div id="agents">
+        <h2>Remote Agents</h2>
+        <div id="agent-list"></div>
+    </div>
+    <script>
+        function updateLocalMetrics() {
+            fetch('/api/metrics')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('cpu').textContent = data.cpu_percent.toFixed(1);
+                    document.getElementById('memory').textContent = data.memory_percent.toFixed(1);
+                    document.getElementById('mem-used').textContent = (data.memory_used / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+                    document.getElementById('mem-total').textContent = (data.memory_total / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+                    document.getElementById('disk').textContent = data.disk_percent.toFixed(1);
+                    document.getElementById('disk-used').textContent = (data.disk_used / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+                    document.getElementById('disk-total').textContent = (data.disk_total / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+                });
+        }
+
+        function updateAlerts() {
+            fetch('/api/alerts')
+                .then(response => response.json())
+                .then(data => {
+                    const alertList = document.getElementById('alert-list');
+                    alertList.innerHTML = '';
+                    data.forEach(alert => {
+                        const div = document.createElement('div');
+                        div.className = 'alert';
+                        div.textContent = alert.message;
+                        alertList.appendChild(div);
+                    });
+                });
+        }
+
+        function updateAgents() {
+            fetch('/api/agents')
+                .then(response => response.json())
+                .then(data => {
+                    const agentList = document.getElementById('agent-list');
+                    agentList.innerHTML = '';
+                    for (const [agentId, agentData] of Object.entries(data)) {
+                        const div = document.createElement('div');
+                        div.className = 'agent';
+                        const now = Date.now() / 1000;
+                        const lastSeen = agentData.last_seen;
+                        const status = (now - lastSeen) < 300 ? 'online' : 'offline'; // 5 min threshold
+                        div.innerHTML = `
+                            <h3>${agentId} <span class="${status}">(${status})</span></h3>
+                            <p>Last seen: ${new Date(lastSeen * 1000).toLocaleString()}</p>
+                            <p>Pending instructions: ${agentData.instructions_pending}</p>
+                        `;
+                        if (agentData.metrics) {
+                            div.innerHTML += `
+                                <div class="metric">CPU: ${agentData.metrics.cpu_percent?.toFixed(1) || '-'}%</div>
+                                <div class="metric">Memory: ${agentData.metrics.memory_percent?.toFixed(1) || '-'}%</div>
+                                <div class="metric">Disk: ${agentData.metrics.disk_percent?.toFixed(1) || '-'}%</div>
+                            `;
+                        }
+                        agentList.appendChild(div);
+                    }
+                });
+        }
+
+        setInterval(updateLocalMetrics, 5000);
+        setInterval(updateAlerts, 10000);
+        setInterval(updateAgents, 10000);
+        updateLocalMetrics();
+        updateAlerts();
+        updateAgents();
+    </script>
+</body>
+</html>
